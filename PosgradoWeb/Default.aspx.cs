@@ -1,7 +1,9 @@
-﻿using System;
+﻿using PosgradoWeb.Controller;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.OleDb;
+using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Web;
@@ -12,8 +14,15 @@ namespace PosgradoWeb
 {
     public partial class _Default : Page
     {
+        SqlConnection con = new SqlConnection();
+
+
+        //DataTable dt = new DataTable();
+
         protected void Page_Load(object sender, EventArgs e)
         {
+            con.ConnectionString = "Data Source=bdposbot.database.windows.net;Initial Catalog=bdposbot;User ID=posgradobot;Password=Posbot123;MultipleActiveResultSets=True;Application Name=EntityFramework";
+            con.Open();
             if (!IsPostBack)
             {
                 PopulateData();
@@ -24,6 +33,21 @@ namespace PosgradoWeb
 
         private void PopulateData()
         {
+            //using (bdEntities dc = new bdEntities())
+            //{
+            //    gvData.DataSource = dc.Pays.ToList();
+            //    gvData.DataBind();
+            //}
+            //ds = new DataSet();
+            //cmd.CommandText = "Select * from Pays";
+            //cmd.Connection = con;
+            //sda = new SqlDataAdapter(cmd);
+            //sda.Fill(ds);
+            //cmd.ExecuteNonQuery();
+            //gvData.DataSource = ds;
+            //gvData.DataBind();
+            //con.Close();
+
             using (bdposbotEntities dc = new bdposbotEntities())
             {
                 gvData.DataSource = dc.Pays.ToList();
@@ -33,93 +57,73 @@ namespace PosgradoWeb
 
         protected void btnImport_Click(object sender, EventArgs e)
         {
-            if (FileUpload1.PostedFile.ContentType == "application/vnd.ms-excel" ||
-                FileUpload1.PostedFile.ContentType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            byte[] xd;
+            xd = FileUpload1.FileBytes;
+
+            var namefile = FileUpload1.PostedFile.FileName;
+            clsExcel lmao = new clsExcel();
+            var list = lmao.mtdConvertirExcel(xd, null);
+            //var name = list[1][1].ToString();
+
+            SqlCommand cmd = new SqlCommand();
+            cmd.CommandText = "Select * from Pays";
+            cmd.Connection = con;
+
+            SqlDataAdapter sda = new SqlDataAdapter(cmd);
+
+            DataSet ds = new DataSet();
+            sda.Fill(ds);
+            sda.Dispose();
+            con.Close();
+            con.Dispose();
+
+            // Import to Database
+            using (bdposbotEntities dc = new bdposbotEntities())
             {
-                try
+                foreach (var ls in list)
                 {
-                    string fileName = Path.Combine(Server.MapPath("~/ImportDocument"), Guid.NewGuid().ToString() + Path.GetExtension(FileUpload1.PostedFile.FileName));
-                    FileUpload1.PostedFile.SaveAs(fileName);
-
-                    string conString = "";
-                    string ext = Path.GetExtension(FileUpload1.PostedFile.FileName);
-
-                    if (ext.ToLower() == ".xls")
+                    if(ls[0] != "Id")
                     {
-                        conString = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" + fileName + ";Extended Properties=\"Excel 8.0;HDR=Yes;IMEX=2\""; 
-                    }
-                    else if (ext.ToLower() == ".xlsx")
-                    {
-                        conString = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" + fileName + ";Extended Properties=\"Excel 12.0 Xml;HDR=Yes;IMEX=2\"";
-                        //conString = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" + fileName + ";Extended Properties=\"Excel 8.0;HDR=Yes;IMEX=2\"";
-                    }
-
-                    string query = "select [id],[ci],[apellidos],[nombres],[cuotaUno],[cuotaDos],[cuotaTres],[cuotaCuatro],[cuotaCinco],[cuotaSeis],[idCurso] from Pays";
-                    OleDbConnection con = new OleDbConnection(conString);
-                    if (con.State == ConnectionState.Closed)
-                    {
-                        con.Open();
-                    }
-
-                    OleDbCommand cmd = new OleDbCommand(query, con);
-                    OleDbDataAdapter da = new OleDbDataAdapter(cmd);
-
-                    DataSet ds = new DataSet();
-                    da.Fill(ds);
-                    da.Dispose();
-                    con.Close();
-                    con.Dispose();
-
-                    //Import to Database
-                    using (bdposbotEntities dc = new bdposbotEntities())
-                    {
-                        foreach (DataRow dr in ds.Tables[0].Rows)
+                        string ci = ls[1];
+                        var v = dc.Pays.Where(a => a.ci.Equals(ci)).FirstOrDefault();
+                        if (v != null)
                         {
-                            string id = dr["id"].ToString();
-                            var v = dc.Pays.Where(a => a.id.Equals(id)).FirstOrDefault();
-                            if (v != null)
-                            {
-                                //Update here
-                                v.ci = dr["ci"].ToString();
-                                v.apellidos = dr["apellidos"].ToString();
-                                v.nombres = dr["nombres"].ToString();
-                                v.cuotaUno = Convert.ToDouble(dr["cuotaUno"]);
-                                v.cuotaDos = Convert.ToDouble(dr["cuotaUno"]);
-                                v.cuotaTres = Convert.ToDouble(dr["cuotaUno"]);
-                                v.cuotaCuatro = Convert.ToDouble(dr["cuotaUno"]);
-                                v.cuotaCinco = Convert.ToDouble(dr["cuotaUno"]);
-                                v.cuotaSeis = Convert.ToDouble(dr["cuotaUno"]);
-                                v.idCurso = dr["idCurso"].ToString();
-                            }
-                            else
-                            {
-                                //Insert
-                                dc.Pays.Add(new Pays
-                                {
-                                    id = Convert.ToInt32(dr["cuotaUno"]),
-                                    ci = dr["ci"].ToString(),
-                                    apellidos = dr["apellidos"].ToString(),
-                                    nombres = dr["nombres"].ToString(),
-                                    cuotaUno = Convert.ToDouble(dr["cuotaUno"]),
-                                    cuotaDos = Convert.ToDouble(dr["cuotaUno"]),
-                                    cuotaTres = Convert.ToDouble(dr["cuotaUno"]),
-                                    cuotaCuatro = Convert.ToDouble(dr["cuotaUno"]),
-                                    cuotaCinco = Convert.ToDouble(dr["cuotaUno"]),
-                                    cuotaSeis = Convert.ToDouble(dr["cuotaUno"]),
-                                    idCurso = dr["idCurso"].ToString()
-                                });
-                            }
+                            //Update here
+                            v.ci = ls[1];
+                            v.apellidos = ls[2];
+                            v.nombres = ls[3];
+                            v.cuotaUno = Convert.ToDouble(ls[4]);
+                            v.cuotaDos = Convert.ToDouble(ls[5]);
+                            v.cuotaTres = Convert.ToDouble(ls[6]);
+                            v.cuotaCuatro = Convert.ToDouble(ls[7]);
+                            v.cuotaCinco = Convert.ToDouble(ls[8]);
+                            v.cuotaSeis = Convert.ToDouble(ls[9]);
+                            v.idCurso = ls[10];
                         }
-                        dc.SaveChanges();
+                        else
+                        {
+                            //Insert
+                            dc.Pays.Add(new Pays
+                            {
+                                id = Convert.ToInt32(ls[0]),
+                                ci = ls[1],
+                                apellidos = ls[2],
+                                nombres = ls[3],
+                                cuotaUno = Convert.ToDouble(ls[4]),
+                                cuotaDos = Convert.ToDouble(ls[5]),
+                                cuotaTres = Convert.ToDouble(ls[6]),
+                                cuotaCuatro = Convert.ToDouble(ls[7]),
+                                cuotaCinco = Convert.ToDouble(ls[8]),
+                                cuotaSeis = Convert.ToDouble(ls[9]),
+                                idCurso = ls[10]
+                            });
+                        }
                     }
-                    PopulateData();
-                    lblMessage.Text = "Successfully data import done!";
                 }
-                catch (Exception)
-                {
-                    throw;
-                }
+                dc.SaveChanges();
             }
+            PopulateData();
+            lblMessage.Text = "Successfully data import done!";
         }
     }
 }
